@@ -1,0 +1,2 @@
+DINTEGRA SRL - CONFERMA ORDINE v5
+Supporto aggiunto per ordini Nexxta con prezzi/importi vuoti e quantità nel formato 1,000 / 2,000 / 3,000.
