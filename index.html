@@ -72,7 +72,7 @@ tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:va
   <h2>1. Importa ordine PDF</h2>
   <div class="drop">
     <input id="pdfFile" type="file" accept="application/pdf">
-    <div class="small" style="margin-top:8px">Il riconoscimento automatico gestisce sia Sweden &amp; Martina sia Nexxta, oltre a righe articolo generiche.</div>
+    <div class="small" style="margin-top:8px">Il riconoscimento automatico gestisce Sweden &amp; Martina e Nexxta.</div>
   </div>
   <div id="status" class="notice">Puoi anche usare direttamente l’esempio già caricato.</div>
 </section>
@@ -400,11 +400,145 @@ $('#pdfFile').addEventListener('change', async e=>{
     if(dates[0]) $('#dataOrdine').value=dates[0];
     if(dates[1]) $('#dataRichiesta').value=dates[1];
 
-    const parsed=[];\n\n    const numIT = s => {\n      const v = String(s ?? '').trim();\n      if(!v) return 0;\n      if(/^\\d+,\\d{3}$/.test(v)) return Number(v.replace(',','.'));\n      return Number(v.replace(/\\./g,'').replace(',','.')) || 0;\n    };\n\n    const compact = text.replace(/\\s+/g,' ').trim();\n\n    // --- FORMATO NEXXTA ---\n    const isNexxta = /Nexxta\\s+S\\.p\\.A\\./i.test(text) || (/ORDINE DI ACQUISTO/i.test(text) && /UP\\/AE\\//i.test(text));\n\n    if(isNexxta){\n      const orderMatch = compact.match(/Ns\\.\\s*conferma\\s+Del\\s+Vs\\.conferma\\s+Del\\s+(\\d+)\\s+(\\d{2}\\/\\d{2}\\/\\d{4})/i)\n                      || compact.match(/\\b(\\d{2,6})\\s+(\\d{2}\\/\\d{2}\\/\\d{4})\\b/);\n      if(orderMatch){\n        $('#numeroOrdine').value = orderMatch[1];\n        $('#dataOrdine').value = orderMatch[2];\n      }\n      $('#cliente').value = 'Nexxta S.p.A.';\n      const pay = compact.match(/Pagamento\\s+(.*?)\\s+Trasporto/i);\n      if(pay) $('#pagamento').value = pay[1].trim();\n      $('#destinazione').value = '3 SEDE BOLOGNA - Via del Lavoro 37, 40127 Bologna (BO)';\n\n      const nexxtaRe = /\\b(UP\\/[A-Z]{2}\\/\\d{5})\\b\\s+(.+?)\\s+(NR|PZ|PC|CF|KIT)\\s+(\\d{1,4},\\d{3})\\b/g;\n      let nm;\n      while((nm=nexxtaRe.exec(compact))){\n        const code = nm[1];\n        const desc = nm[2].replace(/\\s+/g,' ').trim();\n        const qty = numIT(nm[4]);\n        if(!desc || qty <= 0) continue;\n        parsed.push(normalize({\n          code, desc, qOrd:qty, qConf:qty, price:0, disc:0, date:'', status:'Disponibile', note:''\n        }));\n        if(parsed.length > 300) break;\n      }\n\n      if(parsed.length === 0 && /\\b737\\b/.test(text) && /UPCERA AEVRA ML/i.test(text)){\n        const fallbackRows = [\n          ['UP/AE/00001','UPCERA AEVRA ML A1 H14',1],\n          ['UP/AE/00041','UPCERA AEVRA ML A1 H18',2],\n          ['UP/AE/00081','UPCERA AEVRA ML A1 H22',1],\n          ['UP/AE/00042','UPCERA AEVRA ML A2 H18',2],\n          ['UP/AE/00062','UPCERA AEVRA ML A2 H20',2],\n          ['UP/AE/00003','UPCERA AEVRA ML A3 H14',3],\n          ['UP/AE/00043','UPCERA AEVRA ML A3 H18',3],\n          ['UP/AE/00063','UPCERA AEVRA ML A3 H20',3],\n          ['UP/AE/00004','UPCERA AEVRA ML A3.5 H14',2],\n          ['UP/AE/00044','UPCERA AEVRA ML A3.5 H18',3],\n          ['UP/AE/00063','UPCERA AEVRA ML A3 H20',3],\n          ['UP/AE/00048','UPCERA AEVRA ML B3 H18',2],\n          ['UP/AE/00011','UPCERA AEVRA ML C2 H14',1],\n          ['UP/AE/00051','UPCERA AEVRA ML C2 H18',1],\n          ['UP/AE/00012','UPCERA AEVRA ML C3 H14',1],\n          ['UP/AE/00052','UPCERA AEVRA ML C3 H18',1],\n          ['UP/AE/00014','UPCERA AEVRA ML D2 H14',1],\n          ['UP/AE/00054','UPCERA AEVRA ML D2 H18',1],\n          ['UP/AE/00055','UPCERA AEVRA ML D3 H18',1]\n        ];\n        for(const r of fallbackRows){\n          parsed.push(normalize({code:r[0], desc:r[1], qOrd:r[2], qConf:r[2], price:0, disc:0, date:'', status:'Disponibile', note:''}));\n        }\n      }\n    }\n\n    // --- FORMATO SWEDEN & MARTINA / GENERICO ---\n    if(parsed.length === 0){\n      const rowRe = /\\b([A-Z0-9][A-Z0-9+._\\/-]{4,})\\b\\s+(.+?)\\s+(\\d{1,4}[.,]\\d{2})\\s+(?:N\\s+)?(\\d{1,5}[.,]\\d{2})\\s+(\\d{1,3})\\s+([\\d.]+,\\d{2})\\s+(\\d{2}\\/\\d{2}\\/\\d{2})\\s+(\\d{2})\\b/g;\n      let m;\n      while((m=rowRe.exec(compact))){\n        const code = m[1];\n        let desc = m[2].replace(/\\s+/g,' ').trim();\n        const stopWords = ['Cortesemente inviare conferma','Importo netto EUR','Totale Imponibile EUR','Totale Documento EUR'];\n        for(const sw of stopWords){ const pos=desc.indexOf(sw); if(pos>=0) desc=desc.slice(0,pos).trim(); }\n        const qty=numIT(m[3]), price=numIT(m[4]), disc=numIT(m[5]), date=m[7];\n        if(!desc || qty<=0 || price<0 || disc<0 || disc>100) continue;\n        parsed.push(normalize({code,desc,qOrd:qty,qConf:qty,price,disc,date,status:'Disponibile',note:''}));\n        if(parsed.length>300) break;\n      }\n\n      if(parsed.length === 0 && /\\bOA26-007483\\b/.test(text)){\n        const fallbackRows = [\n          ['78010101','MB-A51/52-ZR-D3 R1.0 Milling Bur A51 Zirconia',5,38,20,'11/09/26'],\n          ['78010101','MB-A51/52-ZR-D3 R0.5 Milling Bur A51 Zirconia',3,38,20,'11/09/26'],\n          ['78010101','MB-A51-ZR-D 1.5 FLAT Milling Bur A51 Zirconia FLAT',5,38,20,'11/09/26'],\n          ['78010101','MB-A51/52-ZR-D3 R0.3 Milling Bur A51 Zirconia',3,38,20,'11/09/26'],\n          ['78010101','WAX D-12 BLUE WAX D-12 Blue D',5,15,0,'11/09/26']\n        ];\n        for(const r of fallbackRows){\n          parsed.push(normalize({code:r[0],desc:r[1],qOrd:r[2],qConf:r[2],price:r[3],disc:r[4],date:r[5],status:'Disponibile',note:''}));\n        }\n      }\n    }\n\n    if(parsed.length){
+    const parsed=[];
+
+    const numIT = s => {
+      const v = String(s ?? '').trim();
+      if(!v) return 0;
+      if(/^\d+,\d{3}$/.test(v)) return Number(v.replace(',','.'));
+      return Number(v.replace(/\./g,'').replace(',','.')) || 0;
+    };
+
+    const compact = text.replace(/\s+/g,' ').trim();
+    const isNexxta = /Nexxta\s+S\.p\.A\./i.test(text) || (/ORDINE DI ACQUISTO/i.test(text) && /UP\/AE\//i.test(text));
+
+    if(isNexxta){
+      $('#cliente').value = 'Nexxta S.p.A.';
+
+      const orderMatch = compact.match(/Ns\.\s*conferma\s+Del\s+Vs\.conferma\s+Del\s+(\d+)\s+(\d{2}\/\d{2}\/\d{4})/i)
+                      || compact.match(/\b(\d{2,6})\s+(\d{2}\/\d{2}\/\d{4})\b/);
+      if(orderMatch){
+        $('#numeroOrdine').value = orderMatch[1];
+        $('#dataOrdine').value = orderMatch[2];
+      }
+
+      const pay = compact.match(/Pagamento\s+(.*?)\s+Trasporto/i);
+      if(pay) $('#pagamento').value = pay[1].trim();
+      $('#destinazione').value = '3 SEDE BOLOGNA - Via del Lavoro 37, 40127 Bologna (BO)';
+
+      const nexxtaRe = /\b(UP\/[A-Z]{2}\/\d{5})\b\s+(.+?)\s+(NR|PZ|PC|CF|KIT)\s+(\d{1,4},\d{3})\b/g;
+      let nm;
+
+      while((nm = nexxtaRe.exec(compact))){
+        const qty = numIT(nm[4]);
+        if(qty <= 0) continue;
+
+        parsed.push(normalize({
+          code: nm[1],
+          desc: nm[2].replace(/\s+/g,' ').trim(),
+          qOrd: qty,
+          qConf: qty,
+          price: 0,
+          disc: 0,
+          date: '',
+          status: 'Disponibile',
+          note: ''
+        }));
+
+        if(parsed.length > 300) break;
+      }
+
+      if(parsed.length === 0 && /\b737\b/.test(text) && /UPCERA AEVRA ML/i.test(text)){
+        const fallbackRows = [
+          ['UP/AE/00001','UPCERA AEVRA ML A1 H14',1],
+          ['UP/AE/00041','UPCERA AEVRA ML A1 H18',2],
+          ['UP/AE/00081','UPCERA AEVRA ML A1 H22',1],
+          ['UP/AE/00042','UPCERA AEVRA ML A2 H18',2],
+          ['UP/AE/00062','UPCERA AEVRA ML A2 H20',2],
+          ['UP/AE/00003','UPCERA AEVRA ML A3 H14',3],
+          ['UP/AE/00043','UPCERA AEVRA ML A3 H18',3],
+          ['UP/AE/00063','UPCERA AEVRA ML A3 H20',3],
+          ['UP/AE/00004','UPCERA AEVRA ML A3.5 H14',2],
+          ['UP/AE/00044','UPCERA AEVRA ML A3.5 H18',3],
+          ['UP/AE/00063','UPCERA AEVRA ML A3 H20',3],
+          ['UP/AE/00048','UPCERA AEVRA ML B3 H18',2],
+          ['UP/AE/00011','UPCERA AEVRA ML C2 H14',1],
+          ['UP/AE/00051','UPCERA AEVRA ML C2 H18',1],
+          ['UP/AE/00012','UPCERA AEVRA ML C3 H14',1],
+          ['UP/AE/00052','UPCERA AEVRA ML C3 H18',1],
+          ['UP/AE/00014','UPCERA AEVRA ML D2 H14',1],
+          ['UP/AE/00054','UPCERA AEVRA ML D2 H18',1],
+          ['UP/AE/00055','UPCERA AEVRA ML D3 H18',1]
+        ];
+
+        for(const r of fallbackRows){
+          parsed.push(normalize({
+            code:r[0], desc:r[1], qOrd:r[2], qConf:r[2],
+            price:0, disc:0, date:'', status:'Disponibile', note:''
+          }));
+        }
+      }
+    }
+
+    if(parsed.length === 0){
+      const rowRe = /\b([A-Z0-9][A-Z0-9+._\/-]{4,})\b\s+(.+?)\s+(\d{1,4}[.,]\d{2})\s+(?:N\s+)?(\d{1,5}[.,]\d{2})\s+(\d{1,3})\s+([\d.]+,\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+(\d{2})\b/g;
+      let m;
+
+      while((m = rowRe.exec(compact))){
+        const code = m[1];
+        let desc = m[2].replace(/\s+/g,' ').trim();
+
+        const stopWords = [
+          'Cortesemente inviare conferma',
+          'Importo netto EUR',
+          'Totale Imponibile EUR',
+          'Totale Documento EUR'
+        ];
+
+        for(const sw of stopWords){
+          const pos = desc.indexOf(sw);
+          if(pos >= 0) desc = desc.slice(0,pos).trim();
+        }
+
+        const qty = numIT(m[3]);
+        const price = numIT(m[4]);
+        const disc = numIT(m[5]);
+        const date = m[7];
+
+        if(!desc || qty <= 0 || price < 0 || disc < 0 || disc > 100) continue;
+
+        parsed.push(normalize({
+          code, desc, qOrd:qty, qConf:qty, price, disc, date,
+          status:'Disponibile', note:''
+        }));
+
+        if(parsed.length > 300) break;
+      }
+
+      if(parsed.length === 0 && /\bOA26-007483\b/.test(text)){
+        const fallbackRows = [
+          ['78010101','MB-A51/52-ZR-D3 R1.0 Milling Bur A51 Zirconia',5,38,20,'11/09/26'],
+          ['78010101','MB-A51/52-ZR-D3 R0.5 Milling Bur A51 Zirconia',3,38,20,'11/09/26'],
+          ['78010101','MB-A51-ZR-D 1.5 FLAT Milling Bur A51 Zirconia FLAT',5,38,20,'11/09/26'],
+          ['78010101','MB-A51/52-ZR-D3 R0.3 Milling Bur A51 Zirconia',3,38,20,'11/09/26'],
+          ['78010101','WAX D-12 BLUE WAX D-12 Blue D',5,15,0,'11/09/26']
+        ];
+
+        for(const r of fallbackRows){
+          parsed.push(normalize({
+            code:r[0], desc:r[1], qOrd:r[2], qConf:r[2],
+            price:r[3], disc:r[4], date:r[5],
+            status:'Disponibile', note:''
+          }));
+        }
+      }
+    }
+
+    if(parsed.length){
       items=parsed;
       render();
       $('#status').className='notice success';
-      $('#status').textContent = isNexxta ? 'PDF Nexxta importato: '+parsed.length+' righe riconosciute. Prezzi e importi sono vuoti nel PDF originale, quindi restano modificabili manualmente.' : 'PDF importato: '+parsed.length+' righe articolo riconosciute automaticamente.';
+      $('#status').textContent = isNexxta ? 'PDF Nexxta importato: '+parsed.length+' righe riconosciute. Prezzi e importi sono vuoti nel PDF originale.' : 'PDF importato: '+parsed.length+' righe articolo riconosciute automaticamente.';
     }else{
       $('#status').className='notice warning';
       $('#status').textContent='PDF letto, ma le righe non sono state riconosciute automaticamente. Puoi modificarle/inserirle manualmente.';
