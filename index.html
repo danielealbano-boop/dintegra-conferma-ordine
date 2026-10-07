@@ -412,9 +412,57 @@ $('#pdfFile').addEventListener('change', async e=>{
     };
 
     const compact = text.replace(/\s+/g,' ').trim();
+    const isDPZero = /ORDINE FORNITORE/i.test(text) && /DP\s*ZERO\s*(?:S\.?R\.?L\.?)?/i.test(text);
     const isNexxta = /Nexxta\s+S\.p\.A\./i.test(text) || (/ORDINE DI ACQUISTO/i.test(text) && /UP\/AE\//i.test(text));
 
-    if(isNexxta){
+    if(isDPZero){
+      $('#cliente').value = 'DP ZERO SRL';
+      $('#indirizzoCliente').value = 'Via Monteleone 97, 21013 Gallarate (MI)';
+      $('#destinazione').value = 'DP ZERO S.R.L. (PER ORDINARE) - Via Monteleone 97, 21013 Gallarate (MI)';
+
+      const docMatch = compact.match(/Numero documento.*?Id\.:\s*(\d{5,})/i)
+                    || compact.match(/Numero documento.*?\b(\d{5,})\b/i);
+      if(docMatch) $('#numeroOrdine').value = docMatch[1];
+
+      const dateMatch = compact.match(/\b(\d{2}\/\d{2}\/\d{4})\b\s+DPZERO/i)
+                     || compact.match(/Data documento.*?\b(\d{2}\/\d{2}\/\d{4})\b/i);
+      if(dateMatch) $('#dataOrdine').value = dateMatch[1];
+
+      const tableHeader = 'BarCode Prodotto Cod.Fornitore Cod.Catalogo Barcode Fornitore Confezioni';
+      const dpItemRe = /Cod\. Produttore\s+(.+?)\s+Pezzi confezione\s+(\d+)\s+\1\s+\1\s+(\d+)/gi;
+      let dm;
+      let previousItemEnd = 0;
+
+      while((dm = dpItemRe.exec(compact))){
+        const headerPos = compact.lastIndexOf(tableHeader, dm.index);
+        const descStart = Math.max(previousItemEnd, headerPos >= 0 ? headerPos + tableHeader.length : 0);
+        let desc = compact.slice(descStart, dm.index).replace(/\s+/g,' ').trim();
+        const code = dm[1].replace(/\s+/g,' ').trim();
+        const qty = Number(dm[3]) || 0;
+
+        // Protegge dalle intestazioni che si ripetono quando l'ordine ha più pagine.
+        const repeatedHeaderPos = desc.lastIndexOf(tableHeader);
+        if(repeatedHeaderPos >= 0) desc = desc.slice(repeatedHeaderPos + tableHeader.length).trim();
+
+        if(desc && code && qty > 0){
+          parsed.push(normalize({
+            code,
+            desc,
+            qOrd: qty,
+            qConf: qty,
+            price: 0,
+            disc: 0,
+            date: '',
+            status: 'Disponibile',
+            note: '',
+            substitution: ''
+          }));
+        }
+
+        previousItemEnd = dpItemRe.lastIndex;
+        if(parsed.length > 300) break;
+      }
+    } else if(isNexxta){
       $('#cliente').value = 'Nexxta S.p.A.';
 
       const orderMatch = compact.match(/Ns\.\s*conferma\s+Del\s+Vs\.conferma\s+Del\s+(\d+)\s+(\d{2}\/\d{2}\/\d{4})/i)
@@ -540,7 +588,11 @@ $('#pdfFile').addEventListener('change', async e=>{
       items=parsed;
       render();
       $('#status').className='notice success';
-      $('#status').textContent = isNexxta ? 'PDF Nexxta importato: '+parsed.length+' righe riconosciute. Prezzi e importi sono vuoti nel PDF originale.' : 'PDF importato: '+parsed.length+' righe articolo riconosciute automaticamente.';
+      $('#status').textContent = isDPZero
+        ? 'PDF DP ZERO importato: '+parsed.length+' righe riconosciute automaticamente. Prezzi e importi non sono presenti nel PDF originale.'
+        : (isNexxta
+          ? 'PDF Nexxta importato: '+parsed.length+' righe riconosciute. Prezzi e importi sono vuoti nel PDF originale.'
+          : 'PDF importato: '+parsed.length+' righe articolo riconosciute automaticamente.');
     }else{
       $('#status').className='notice warning';
       $('#status').textContent='PDF letto, ma le righe non sono state riconosciute automaticamente. Puoi modificarle/inserirle manualmente.';
