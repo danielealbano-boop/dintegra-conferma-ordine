@@ -149,7 +149,7 @@ tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:va
     <button id="reset" class="danger">Azzera</button>
   </div>
   <div class="notice" style="margin-top:10px">
-    <b>Genera Conferma Ordine PDF</b> apre la stampa del browser per salvare il documento. <b>PDF + WhatsApp</b>: su telefono apre la condivisione; su PC scarica il PDF e apre direttamente WhatsApp Web.
+    <b>Genera Conferma Ordine PDF</b> apre la stampa del browser. <b>PDF + WhatsApp</b>: su PC apre WhatsApp Web e la stessa finestra <b>Salva come PDF</b>, evitando i file bianchi; su telefono prova la condivisione diretta.
   </div>
 </section>
 </main>
@@ -626,58 +626,63 @@ $('#generatePdf').addEventListener('click',()=>{
 
 $('#shareWhatsapp').addEventListener('click', async ()=>{
   if(!items.length){ alert('Inserisci almeno un articolo.'); return; }
+
   const btn=$('#shareWhatsapp');
   const oldText=btn.textContent;
   const isMobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  let whatsappTab=null;
-
-  // Sul PC apro subito una scheda, prima delle operazioni asincrone,
-  // così il browser non la blocca come popup.
-  if(!isMobile){
-    whatsappTab=window.open('about:blank','_blank');
-    if(whatsappTab){
-      whatsappTab.document.write('<p style="font-family:Arial;padding:24px">Preparazione PDF e apertura WhatsApp Web...</p>');
-    }
-  }
+  const msgText='Buongiorno, inviamo in allegato la conferma ordine '+($('#numeroOrdine').value || '')+'. Dintegra Srl';
 
   btn.disabled=true;
-  btn.textContent='Creo il PDF...';
+  btn.textContent=isMobile ? 'Creo il PDF...' : 'Apro PDF + WhatsApp...';
 
   try{
-    const {file,blob,fileName}=await createPdfFile();
-    const msgText='Buongiorno, inviamo in allegato la conferma ordine '+($('#numeroOrdine').value || '')+'. Dintegra Srl';
+    if(!isMobile){
+      // Sul PC usiamo il motore di stampa del browser: è lo stesso del pulsante
+      // PDF normale ed evita i PDF bianchi generati dalle librerie JavaScript.
+      const webUrl='https://web.whatsapp.com/send?text='+encodeURIComponent(msgText);
+      const whatsappTab=window.open(webUrl,'_blank');
+
+      buildPrintArea();
+      $('#status').className='notice success';
+      $('#status').innerHTML='<b>WhatsApp Web è stato aperto.</b> Nella finestra di stampa scegli <b>Salva come PDF</b>, poi torna su WhatsApp e allega il file salvato.';
+
+      // Piccolo ritardo per consentire al browser di completare il rendering.
+      await new Promise(resolve=>setTimeout(resolve,250));
+      window.print();
+
+      if(!whatsappTab){
+        $('#status').className='notice warning';
+        $('#status').innerHTML='Il browser ha bloccato WhatsApp Web. Il PDF può comunque essere salvato dalla finestra di stampa; poi apri WhatsApp Web manualmente.';
+      }
+      return;
+    }
+
+    // Su smartphone resta disponibile la condivisione nativa del file.
+    const {file}=await createPdfFile();
     const shareData={
       title:$('#titolo').value || "Conferma d'Ordine",
       text:msgText,
       files:[file]
     };
 
-    if(isMobile && navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
       await navigator.share(shareData);
       $('#status').className='notice success';
-      $('#status').textContent='PDF creato. Seleziona WhatsApp nel menu di condivisione per inviarlo.';
+      $('#status').textContent='PDF creato. Seleziona WhatsApp nel menu di condivisione.';
     }else{
-      downloadBlob(blob,fileName);
-      const webUrl='https://web.whatsapp.com/send?text='+encodeURIComponent(msgText);
-
-      if(whatsappTab){
-        whatsappTab.location.href=webUrl;
-      }else{
-        window.open(webUrl,'_blank');
-      }
-
-      $('#status').className='notice success';
-      $('#status').innerHTML='PDF scaricato e <b>WhatsApp Web aperto</b>. Scegli il cliente, poi clicca sulla graffetta e allega il PDF <b>'+esc(fileName)+'</b> dalla cartella Download.';
+      buildPrintArea();
+      $('#status').className='notice warning';
+      $('#status').textContent='La condivisione diretta non è disponibile. Salva il PDF dalla finestra di stampa e invialo con WhatsApp.';
+      setTimeout(()=>window.print(),150);
     }
   }catch(err){
-    if(whatsappTab && !whatsappTab.closed) whatsappTab.close();
     if(err && err.name==='AbortError'){
       $('#status').className='notice';
       $('#status').textContent='Condivisione annullata. Il documento non è stato inviato.';
     }else{
       console.error(err);
       $('#status').className='notice warning';
-      $('#status').textContent='Non sono riuscito ad aprire WhatsApp automaticamente. Il pulsante PDF normale resta disponibile.';
+      $('#status').textContent='Si è verificato un problema. Usa il pulsante PDF normale e allega il file su WhatsApp.';
     }
   }finally{
     btn.disabled=false;
