@@ -259,61 +259,233 @@ function safeFileName(value){
   return String(value || '').trim().replace(/[^a-z0-9._-]+/gi,'_').replace(/^_+|_+$/g,'') || 'conferma_ordine';
 }
 
-function loadHtml2Pdf(){
-  if(window.html2pdf) return Promise.resolve(window.html2pdf);
+function loadScriptOnce(src, marker){
+  const ready=marker();
+  if(ready) return Promise.resolve(ready);
   return new Promise((resolve,reject)=>{
-    const existing=document.querySelector('script[data-html2pdf]');
+    const existing=[...document.scripts].find(s=>s.src===src);
     if(existing){
-      existing.addEventListener('load',()=>resolve(window.html2pdf),{once:true});
-      existing.addEventListener('error',()=>reject(new Error('html2pdf non disponibile')),{once:true});
+      if(marker()) return resolve(marker());
+      existing.addEventListener('load',()=>resolve(marker()),{once:true});
+      existing.addEventListener('error',()=>reject(new Error('Libreria PDF non disponibile')),{once:true});
       return;
     }
     const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.src=src;
     s.async=true;
-    s.dataset.html2pdf='1';
-    s.onload=()=>resolve(window.html2pdf);
-    s.onerror=()=>reject(new Error('html2pdf non disponibile'));
+    s.onload=()=>resolve(marker());
+    s.onerror=()=>reject(new Error('Libreria PDF non disponibile'));
     document.head.appendChild(s);
   });
 }
 
+async function loadPdfLibraries(){
+  await loadScriptOnce(
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    ()=>window.jspdf && window.jspdf.jsPDF
+  );
+  const jsPDF=window.jspdf && window.jspdf.jsPDF;
+  if(!jsPDF) throw new Error('jsPDF non disponibile');
+
+  const testDoc=new jsPDF();
+  if(typeof testDoc.autoTable!=='function'){
+    await loadScriptOnce(
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js',
+      ()=>{
+        try{
+          const d=new jsPDF();
+          return typeof d.autoTable==='function' ? d.autoTable : null;
+        }catch(e){ return null; }
+      }
+    );
+  }
+
+  const verifyDoc=new jsPDF();
+  if(typeof verifyDoc.autoTable!=='function') throw new Error('Tabella PDF non disponibile');
+  return jsPDF;
+}
+
 async function createPdfFile(){
-  buildPrintArea();
-  const html2pdf=await loadHtml2Pdf();
-  const area=$('#printArea');
-  const oldStyle=area.getAttribute('style') || '';
-  area.style.display='block';
-  area.style.position='fixed';
-  area.style.left='0';
-  area.style.zIndex='2147483647';
-  area.style.pointerEvents='none';
-  area.style.top='0';
-  area.style.width='1120px';
-  area.style.background='#fff';
-  area.style.padding='12px';
+  const jsPDF=await loadPdfLibraries();
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const pageWidth=doc.internal.pageSize.getWidth();
+  const pageHeight=doc.internal.pageSize.getHeight();
+  const left=10;
+  const right=10;
+  const contentWidth=pageWidth-left-right;
 
   const order=safeFileName($('#numeroOrdine').value);
   const client=safeFileName($('#cliente').value);
   const fileName='Conferma_Ordine_'+order+(client ? '_'+client : '')+'.pdf';
 
-  try{
-    const worker=html2pdf().set({
-      margin:[6,6,6,6],
-      filename:fileName,
-      image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:1.5,useCORS:true,backgroundColor:'#ffffff'},
-      jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},
-      pagebreak:{mode:['css','legacy']}
-    }).from(area).toPdf();
+  const txt=(v)=>String(v ?? '');
+  const nfmt=(v)=>new Intl.NumberFormat('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0);
 
-    const pdf=await worker.get('pdf');
-    const blob=pdf.output('blob');
-    return {file:new File([blob],fileName,{type:'application/pdf'}),blob,fileName};
-  } finally {
-    if(oldStyle) area.setAttribute('style',oldStyle);
-    else area.removeAttribute('style');
+  doc.setTextColor(23,32,51);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.text('Dintegra Srl',left,13);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  doc.text('Via Giuseppe Parini 3 - 20814 Varedo (MB) - P. IVA 13401550960',left,18);
+  doc.setDrawColor(23,32,51);
+  doc.setLineWidth(0.8);
+  doc.line(left,21,pageWidth-right,21);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(15);
+  doc.text(txt($('#titolo').value || "Conferma d'Ordine"),left,29);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  const introLines=doc.splitTextToSize(txt($('#intro').value),contentWidth);
+  doc.text(introLines,left,35);
+
+  let y=35+(introLines.length*4)+3;
+  const half=(contentWidth-6)/2;
+
+  doc.setDrawColor(215,220,228);
+  doc.setFillColor(248,250,252);
+  doc.roundedRect(left,y,half,27,2,2,'FD');
+  doc.roundedRect(left+half+6,y,half,27,2,2,'FD');
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica','bold');
+  doc.text('Cliente',left+3,y+5);
+  doc.setFont('helvetica','normal');
+  const clientLines=doc.splitTextToSize(
+    [txt($('#cliente').value),txt($('#indirizzoCliente').value)].filter(Boolean).join(' - '),
+    half-6
+  );
+  doc.text(clientLines,left+3,y+10);
+  doc.setFont('helvetica','bold');
+  doc.text('Ordine cliente:',left+3,y+20);
+  doc.setFont('helvetica','normal');
+  doc.text(txt($('#numeroOrdine').value),left+30,y+20);
+  doc.setFont('helvetica','bold');
+  doc.text('Data ordine:',left+3,y+24.5);
+  doc.setFont('helvetica','normal');
+  doc.text(txt($('#dataOrdine').value),left+25,y+24.5);
+
+  const bx=left+half+6;
+  doc.setFont('helvetica','bold');
+  doc.text('Consegna / Pagamento',bx+3,y+5);
+  doc.setFont('helvetica','normal');
+  doc.text('Data richiesta: '+txt($('#dataRichiesta').value),bx+3,y+10);
+  doc.text('Pagamento: '+txt($('#pagamento').value),bx+3,y+14.5);
+  const destLines=doc.splitTextToSize('Destinazione: '+txt($('#destinazione').value),half-6);
+  doc.text(destLines,bx+3,y+19);
+
+  y+=32;
+
+  const body=items.map(it=>[
+    txt(it.code),
+    txt(it.desc),
+    txt(it.qOrd),
+    txt(it.qConf),
+    nfmt(it.price),
+    nfmt(it.disc),
+    nfmt(lineTotal(it)),
+    txt(it.date),
+    txt(it.status),
+    txt(it.note),
+    txt(it.substitution)
+  ]);
+
+  doc.autoTable({
+    startY:y,
+    head:[['Codice','Descrizione','Q. ord.','Q. conf.','Prezzo','Sc.%','Importo','Data','Stato','Note','Possibile sostituzione']],
+    body,
+    theme:'grid',
+    styles:{
+      font:'helvetica',
+      fontSize:6.4,
+      cellPadding:1.5,
+      valign:'top',
+      overflow:'linebreak',
+      lineColor:[223,227,232],
+      lineWidth:0.15,
+      textColor:[23,32,51]
+    },
+    headStyles:{
+      fillColor:[23,32,51],
+      textColor:[255,255,255],
+      fontStyle:'bold',
+      fontSize:6.2
+    },
+    columnStyles:{
+      0:{cellWidth:27},
+      1:{cellWidth:49},
+      2:{cellWidth:12,halign:'right'},
+      3:{cellWidth:12,halign:'right'},
+      4:{cellWidth:15,halign:'right'},
+      5:{cellWidth:12,halign:'right'},
+      6:{cellWidth:17,halign:'right'},
+      7:{cellWidth:18},
+      8:{cellWidth:22},
+      9:{cellWidth:30},
+      10:{cellWidth:45}
+    },
+    margin:{left,right,top:10,bottom:16},
+    didParseCell:data=>{
+      if(data.section==='body'){
+        const it=items[data.row.index];
+        if(!it) return;
+        if(it.qConf===0 || it.status==='Non disponibile'){
+          data.cell.styles.fillColor=[253,236,236];
+        }else if(it.qConf!==it.qOrd || it.code!==it.origCode || it.desc!==it.origDesc || it.status==='Parziale' || it.status==='Da ordinare'){
+          data.cell.styles.fillColor=[255,247,220];
+        }
+      }
+    }
+  });
+
+  let finalY=(doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY+6 : y+10;
+  if(finalY>pageHeight-36){
+    doc.addPage();
+    finalY=14;
   }
+
+  const o=items.reduce((s,it)=>s+origTotal(it),0);
+  const conf=items.reduce((s,it)=>s+lineTotal(it),0);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.text('Totale ordine originale: EUR '+nfmt(o),left,finalY);
+  doc.text('Totale confermato: EUR '+nfmt(conf),left+65,finalY);
+  doc.text('Differenza: EUR '+nfmt(conf-o),left+128,finalY);
+
+  finalY+=6;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+
+  const notes=txt($('#noteGenerali').value).trim();
+  if(notes){
+    const noteLines=doc.splitTextToSize('Note: '+notes,contentWidth);
+    if(finalY+(noteLines.length*4)>pageHeight-18){
+      doc.addPage();
+      finalY=14;
+    }
+    doc.text(noteLines,left,finalY);
+    finalY+=noteLines.length*4+2;
+  }
+
+  const finale=txt($('#finale').value).trim();
+  if(finale){
+    const finalLines=doc.splitTextToSize(finale,contentWidth);
+    if(finalY+(finalLines.length*4)>pageHeight-18){
+      doc.addPage();
+      finalY=14;
+    }
+    doc.text(finalLines,left,finalY);
+    finalY+=finalLines.length*4+4;
+  }
+
+  doc.setFont('helvetica','bold');
+  doc.text(txt($('#firma').value || 'Dintegra Srl'),left,Math.min(finalY,pageHeight-10));
+
+  const blob=doc.output('blob');
+  if(!blob || blob.size<1000) throw new Error('PDF non generato correttamente');
+  return {file:new File([blob],fileName,{type:'application/pdf'}),blob,fileName};
 }
 
 function downloadBlob(blob,fileName){
