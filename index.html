@@ -149,7 +149,7 @@ tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:va
     <button id="reset" class="danger">Azzera</button>
   </div>
   <div class="notice" style="margin-top:10px">
-    <b>Genera Conferma Ordine PDF</b> apre la stampa del browser per salvare il documento. <b>PDF + WhatsApp</b> crea invece direttamente il PDF e apre la condivisione del telefono: scegli WhatsApp e il contatto a cui inviarlo.
+    <b>Genera Conferma Ordine PDF</b> apre la stampa del browser per salvare il documento. <b>PDF + WhatsApp</b>: su telefono apre la condivisione; su PC scarica il PDF e apre direttamente WhatsApp Web.
   </div>
 </section>
 </main>
@@ -454,36 +454,56 @@ $('#shareWhatsapp').addEventListener('click', async ()=>{
   if(!items.length){ alert('Inserisci almeno un articolo.'); return; }
   const btn=$('#shareWhatsapp');
   const oldText=btn.textContent;
+  const isMobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  let whatsappTab=null;
+
+  // Sul PC apro subito una scheda, prima delle operazioni asincrone,
+  // così il browser non la blocca come popup.
+  if(!isMobile){
+    whatsappTab=window.open('about:blank','_blank');
+    if(whatsappTab){
+      whatsappTab.document.write('<p style="font-family:Arial;padding:24px">Preparazione PDF e apertura WhatsApp Web...</p>');
+    }
+  }
+
   btn.disabled=true;
   btn.textContent='Creo il PDF...';
 
   try{
     const {file,blob,fileName}=await createPdfFile();
+    const msgText='Buongiorno, inviamo in allegato la conferma ordine '+($('#numeroOrdine').value || '')+'. Dintegra Srl';
     const shareData={
       title:$('#titolo').value || "Conferma d'Ordine",
-      text:'Conferma ordine '+($('#numeroOrdine').value || '')+' - Dintegra Srl',
+      text:msgText,
       files:[file]
     };
 
-    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    if(isMobile && navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
       await navigator.share(shareData);
       $('#status').className='notice success';
       $('#status').textContent='PDF creato. Seleziona WhatsApp nel menu di condivisione per inviarlo.';
     }else{
       downloadBlob(blob,fileName);
-      const msg=encodeURIComponent('Buongiorno, inviamo in allegato la conferma ordine '+($('#numeroOrdine').value || '')+'. Dintegra Srl');
-      window.open('https://wa.me/?text='+msg,'_blank');
-      $('#status').className='notice warning';
-      $('#status').textContent='Il PDF è stato scaricato. WhatsApp è stato aperto: allega il PDF appena salvato.';
+      const webUrl='https://web.whatsapp.com/send?text='+encodeURIComponent(msgText);
+
+      if(whatsappTab){
+        whatsappTab.location.href=webUrl;
+      }else{
+        window.open(webUrl,'_blank');
+      }
+
+      $('#status').className='notice success';
+      $('#status').innerHTML='PDF scaricato e <b>WhatsApp Web aperto</b>. Scegli il cliente, poi clicca sulla graffetta e allega il PDF <b>'+esc(fileName)+'</b> dalla cartella Download.';
     }
   }catch(err){
+    if(whatsappTab && !whatsappTab.closed) whatsappTab.close();
     if(err && err.name==='AbortError'){
       $('#status').className='notice';
       $('#status').textContent='Condivisione annullata. Il documento non è stato inviato.';
     }else{
       console.error(err);
       $('#status').className='notice warning';
-      $('#status').textContent='Non sono riuscito ad aprire la condivisione automatica. Usa "Genera Conferma Ordine PDF" e allega il PDF manualmente su WhatsApp.';
+      $('#status').textContent='Non sono riuscito ad aprire WhatsApp automaticamente. Il pulsante PDF normale resta disponibile.';
     }
   }finally{
     btn.disabled=false;
