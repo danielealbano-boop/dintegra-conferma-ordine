@@ -35,12 +35,12 @@ button{border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:point
 .success{background:#edf8f1;border-color:#cce8d4}
 .warning{background:#fff7dc;border-color:#eadc9f}
 .table-wrap{overflow:auto;max-height:530px;border:1px solid #e4e7ec;border-radius:10px}
-table{width:100%;border-collapse:collapse;min-width:1260px}
+table{width:100%;border-collapse:collapse;min-width:1480px}
 th,td{border-bottom:1px solid #e7ebef;padding:7px;text-align:left;vertical-align:top}
 th{position:sticky;top:0;background:#f8fafc;font-size:11px;z-index:1}
 td input,td select{padding:7px;font-size:13px}
 tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:var(--bad)}
-.code{min-width:210px}.desc{min-width:320px}.num{width:84px}.money{width:100px}
+.code{min-width:210px}.desc{min-width:320px}.num{width:84px}.money{width:100px}.substitution{min-width:260px}
 .totals{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:10px}
 .metric{border:1px solid #e4e7ec;border-radius:10px;background:#f8fafc;padding:12px}
 .metric b{display:block;font-size:20px;margin-top:5px}
@@ -106,7 +106,7 @@ tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:va
       <thead>
         <tr>
           <th>Codice</th><th>Descrizione</th><th>Q.tà ord.</th><th>Q.tà conf.</th>
-          <th>Prezzo €</th><th>Sconto %</th><th>Data</th><th>Stato</th><th>Note</th><th></th>
+          <th>Prezzo €</th><th>Sconto %</th><th>Data</th><th>Stato</th><th>Note</th><th>Possibile sostituzione</th><th></th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -180,7 +180,7 @@ function normalize(it){
     desc:it.desc||'', origDesc:it.origDesc ?? it.desc ?? '',
     qOrd:Number(it.qOrd)||0, qConf:Number(it.qConf ?? it.qOrd)||0,
     price:Number(it.price)||0, disc:Number(it.disc)||0,
-    date:it.date||'', status:it.status||'Disponibile', note:it.note||''
+    date:it.date||'', status:it.status||'Disponibile', note:it.note||'', substitution:it.substitution||''
   };
 }
 function rowClass(it){
@@ -208,6 +208,7 @@ function render(){
         </select>
       </td>
       <td><input data-i="${i}" data-k="note" value="${esc(it.note)}"></td>
+      <td><input class="substitution" data-i="${i}" data-k="substitution" value="${esc(it.substitution)}" placeholder="Es. sostituibile con..."></td>
       <td><button type="button" class="danger del" data-i="${i}">Elimina</button></td>`;
     rowsEl.appendChild(tr);
   });
@@ -267,6 +268,7 @@ function buildPrintArea(){
       <td>${esc(it.date)}</td>
       <td>${esc(it.status)}</td>
       <td>${esc(it.note)}</td>
+      <td>${esc(it.substitution)}</td>
     </tr>`).join('');
 
   $('#printArea').innerHTML=`
@@ -313,11 +315,11 @@ function buildPrintArea(){
     <table>
       <thead>
         <tr>
-          <th style="width:12%">Codice</th><th style="width:24%">Descrizione</th>
-          <th style="width:5%">Q. ord.</th><th style="width:5%">Q. conf.</th>
-          <th style="width:6%">Prezzo</th><th style="width:5%">Sc.%</th>
-          <th style="width:8%">Importo</th><th style="width:7%">Data</th>
-          <th style="width:9%">Stato</th><th style="width:19%">Note</th>
+          <th style="width:11%">Codice</th><th style="width:20%">Descrizione</th>
+          <th style="width:4.5%">Q. ord.</th><th style="width:4.5%">Q. conf.</th>
+          <th style="width:6%">Prezzo</th><th style="width:4%">Sc.%</th>
+          <th style="width:7%">Importo</th><th style="width:7%">Data</th>
+          <th style="width:8%">Stato</th><th style="width:11%">Note</th><th style="width:17%">Possibile sostituzione</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -361,7 +363,7 @@ rowsEl.addEventListener('click', e=>{
 });
 
 $('#addRow').addEventListener('click',()=>{
-  items.push(normalize({code:'',desc:'',qOrd:1,qConf:1,price:0,disc:0,date:$('#dataRichiesta').value,status:'Disponibile',note:''}));
+  items.push(normalize({code:'',desc:'',qOrd:1,qConf:1,price:0,disc:0,date:$('#dataRichiesta').value,status:'Disponibile',note:'',substitution:''}));
   render();
 });
 $('#loadDemo').addEventListener('click',loadDemo);
