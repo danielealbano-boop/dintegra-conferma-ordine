@@ -285,7 +285,9 @@ async function createPdfFile(){
   const oldStyle=area.getAttribute('style') || '';
   area.style.display='block';
   area.style.position='fixed';
-  area.style.left='-12000px';
+  area.style.left='0';
+  area.style.zIndex='-1';
+  area.style.pointerEvents='none';
   area.style.top='0';
   area.style.width='1120px';
   area.style.background='#fff';
