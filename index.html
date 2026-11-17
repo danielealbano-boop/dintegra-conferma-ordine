@@ -129,11 +129,11 @@ tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:va
   <h2>5. Testo conferma</h2>
   <div class="row">
     <div class="field"><label>Titolo documento</label><input id="titolo" value="Conferma d'Ordine"></div>
-    <div class="field"><label>Referente / firma</label><input id="firma" value="Dintegra Srl"></div>
+    <div class="field"><label>Referente / firma</label><input id="firma" value="Abila Srl"></div>
   </div>
   <div style="margin-top:10px">
     <label>Testo introduttivo</label>
-    <textarea id="intro">Con la presente Dintegra Srl conferma la ricezione del vostro ordine e riporta di seguito le quantità confermate.</textarea>
+    <textarea id="intro">Con la presente Abila Srl conferma la ricezione del vostro ordine e riporta di seguito le quantità confermate.</textarea>
   </div>
   <div style="margin-top:10px">
     <label>Note generali</label>
@@ -324,10 +324,10 @@ async function createPdfFile(){
   doc.setTextColor(23,32,51);
   doc.setFont('helvetica','bold');
   doc.setFontSize(18);
-  doc.text('Dintegra Srl',left,13);
+  doc.text('Abila Srl',left,13);
   doc.setFont('helvetica','normal');
   doc.setFontSize(8);
-  doc.text('Via Giuseppe Parini 3 - 20814 Varedo (MB) - P. IVA 13401550960',left,18);
+  doc.text('Via Giuseppe Parini 3 - 20814 Varedo (MB) - P. IVA 13266860967',left,18);
   doc.setDrawColor(23,32,51);
   doc.setLineWidth(0.8);
   doc.line(left,21,pageWidth-right,21);
@@ -481,7 +481,7 @@ async function createPdfFile(){
   }
 
   doc.setFont('helvetica','bold');
-  doc.text(txt($('#firma').value || 'Dintegra Srl'),left,Math.min(finalY,pageHeight-10));
+  doc.text(txt($('#firma').value || 'Abila Srl'),left,Math.min(finalY,pageHeight-10));
 
   const blob=doc.output('blob');
   if(!blob || blob.size<1000) throw new Error('PDF non generato correttamente');
@@ -538,8 +538,8 @@ function buildPrintArea(){
       #printArea .sign{margin-top:15px;font-weight:bold}
     </style>
     <div class="brand">
-      <h1>Dintegra Srl</h1>
-      <p>Via Giuseppe Parini 3 – 20814 Varedo (MB) – P. IVA 13401550960</p>
+      <h1>Abila Srl</h1>
+      <p>Via Giuseppe Parini 3 – 20814 Varedo (MB) – P. IVA 13266860967</p>
     </div>
     <h2>${esc($('#titolo').value || "Conferma d'Ordine")}</h2>
     <div class="intro">${esc($('#intro').value)}</div>
@@ -577,7 +577,7 @@ function buildPrintArea(){
     </div>
     ${$('#noteGenerali').value.trim() ? `<div class="notes"><b>Note:</b> ${esc($('#noteGenerali').value)}</div>` : ''}
     <div class="notes">${esc($('#finale').value)}</div>
-    <div class="sign">${esc($('#firma').value || 'Dintegra Srl')}</div>`;
+    <div class="sign">${esc($('#firma').value || 'Abila Srl')}</div>`;
 }
 
 rowsEl.addEventListener('input', e=>{
