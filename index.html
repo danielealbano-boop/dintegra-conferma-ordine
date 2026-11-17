@@ -868,7 +868,12 @@ $('#pdfFile').addEventListener('change', async e=>{
 
         const qty = numIT(m[3]);
         const price = numIT(m[4]);
-        const disc = numIT(m[5]);
+        let disc = numIT(m[5]);
+        const sourceLineAmount = numIT(m[6]);
+        const calculatedLineAmount = qty * price * (1 - disc / 100);
+        if(qty > 0 && price > 0 && Math.abs(calculatedLineAmount - sourceLineAmount) < 0.05){
+          disc = (1 - sourceLineAmount / (qty * price)) * 100;
+        }
         const date = m[7];
 
         if(!desc || qty <= 0 || price < 0 || disc < 0 || disc > 100) continue;
