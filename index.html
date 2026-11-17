@@ -119,7 +119,10 @@ tr.ok{background:var(--ok)} tr.warn{background:var(--warn)} tr.bad{background:va
   <h2>4. Riepilogo</h2>
   <div class="totals">
     <div class="metric">Totale originale<b id="totOrig">€ 0,00</b></div>
-    <div class="metric">Totale confermato<b id="totConf">€ 0,00</b></div>
+    <div class="metric">Imponibile confermato<b id="totConf">€ 0,00</b></div>
+    <div class="metric">IVA<b id="totVat">€ 0,00</b></div>
+    <div class="metric">Totale documento<b id="totGross">€ 0,00</b></div>
+    <div class="metric">Totale originale<b id="totOrig">€ 0,00</b></div>
     <div class="metric">Differenza<b id="totDiff">€ 0,00</b></div>
     <div class="metric">Righe modificate<b id="modCount">0</b></div>
   </div>
@@ -176,12 +179,15 @@ function lineTotal(it){
 function origTotal(it){
   return (Number(it.qOrd)||0) * (Number(it.price)||0) * (1-(Number(it.disc)||0)/100);
 }
+function vatTotal(it){
+  return lineTotal(it) * (Number(it.vat)||0) / 100;
+}
 function normalize(it){
   return {
     code:it.code||'', origCode:it.origCode ?? it.code ?? '',
     desc:it.desc||'', origDesc:it.origDesc ?? it.desc ?? '',
     qOrd:Number(it.qOrd)||0, qConf:Number(it.qConf ?? it.qOrd)||0,
-    price:Number(it.price)||0, disc:Number(it.disc)||0,
+    price:Number(it.price)||0, disc:Number(it.disc)||0, vat:Number(it.vat ?? 22)||0,
     date:it.date||'', status:it.status||'Disponibile', note:it.note||'', substitution:it.substitution||''
   };
 }
@@ -219,9 +225,12 @@ function render(){
 function updateTotals(){
   const o=items.reduce((s,it)=>s+origTotal(it),0);
   const c=items.reduce((s,it)=>s+lineTotal(it),0);
+  const vat=items.reduce((s,it)=>s+vatTotal(it),0);
   const m=items.filter(it=>it.qConf!==it.qOrd || it.code!==it.origCode || it.desc!==it.origDesc || it.status!=='Disponibile').length;
   $('#totOrig').textContent=money(o);
   $('#totConf').textContent=money(c);
+  $('#totVat').textContent=money(vat);
+  $('#totGross').textContent=money(c+vat);
   $('#totDiff').textContent=money(c-o);
   $('#modCount').textContent=String(m);
 }
@@ -448,13 +457,17 @@ async function createPdfFile(){
 
   const o=items.reduce((s,it)=>s+origTotal(it),0);
   const conf=items.reduce((s,it)=>s+lineTotal(it),0);
+  const vat=items.reduce((s,it)=>s+vatTotal(it),0);
   doc.setFont('helvetica','bold');
   doc.setFontSize(9);
   doc.text('Totale ordine originale: EUR '+nfmt(o),left,finalY);
   doc.text('Totale confermato: EUR '+nfmt(conf),left+65,finalY);
   doc.text('Differenza: EUR '+nfmt(conf-o),left+128,finalY);
+  finalY+=5;
+  doc.text('IVA: EUR '+nfmt(vat),left,finalY);
+  doc.text('Totale documento (IVA inclusa): EUR '+nfmt(conf+vat),left+65,finalY);
 
-  finalY+=6;
+  finalY+=7;
   doc.setFont('helvetica','normal');
   doc.setFontSize(8.5);
 
@@ -502,6 +515,7 @@ function downloadBlob(blob,fileName){
 function buildPrintArea(){
   const o=items.reduce((s,it)=>s+origTotal(it),0);
   const c=items.reduce((s,it)=>s+lineTotal(it),0);
+  const vat=items.reduce((s,it)=>s+vatTotal(it),0);
   const rows=items.map(it=>`
     <tr class="${rowClass(it)}">
       <td>${esc(it.code)}</td>
@@ -574,6 +588,10 @@ function buildPrintArea(){
       <span>Totale ordine originale: ${money(o)}</span>
       <span>Totale confermato: ${money(c)}</span>
       <span>Differenza: ${money(c-o)}</span>
+    </div>
+    <div class="sum">
+      <span>IVA: ${money(vat)}</span>
+      <span>Totale documento (IVA inclusa): ${money(c+vat)}</span>
     </div>
     ${$('#noteGenerali').value.trim() ? `<div class="notes"><b>Note:</b> ${esc($('#noteGenerali').value)}</div>` : ''}
     <div class="notes">${esc($('#finale').value)}</div>
@@ -882,7 +900,7 @@ $('#pdfFile').addEventListener('change', async e=>{
 
         parsed.push(normalize({
           code, desc, qOrd:qty, qConf:qty, price, disc, date,
-          status:'Disponibile', note:''
+          status:'Disponibile', note:'', vat:numIT(m[8])
         }));
         if(parsed.length === 1 && date) $('#dataRichiesta').value = date;
 
