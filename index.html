@@ -708,7 +708,11 @@ $('#pdfFile').addEventListener('change', async e=>{
     }
     const ord=text.match(/\bOA\d{2}-\d{6}\b/);
     if(ord) $('#numeroOrdine').value=ord[0];
-    if(/SWEDEN\s*&\s*MARTINA/i.test(text)) $('#cliente').value='SWEDEN & MARTINA S.p.A.';
+    if(/SWEDEN\s*&\s*MARTINA/i.test(text)) {
+      $('#cliente').value='SWEDEN & MARTINA S.p.A.';
+      $('#indirizzoCliente').value='Via Veneto 10, 35020 Due Carrare (PD)';
+      $('#destinazione').value='SWEDEN & MARTINA, Via Veneto 10, 35020 Due Carrare (PD)';
+    }
     if(/Bonifico bancario/i.test(text)) $('#pagamento').value='Bonifico bancario';
     const dates=[...text.matchAll(/\b\d{2}\/\d{2}\/\d{2}\b/g)].map(m=>m[0]);
     if(dates[0]) $('#dataOrdine').value=dates[0];
@@ -843,7 +847,7 @@ $('#pdfFile').addEventListener('change', async e=>{
     }
 
     if(parsed.length === 0){
-      const rowRe = /\b([A-Z0-9][A-Z0-9+._\/-]{4,})\b\s+(.+?)\s+(\d{1,4}[.,]\d{2})\s+(?:N\s+)?(\d{1,5}[.,]\d{2})\s+(\d{1,3})\s+([\d.]+,\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+(\d{2})\b/g;
+      const rowRe = /\b([A-Z0-9][A-Z0-9+._\/-]{4,})\b\s+(.+?)\s+(\d{1,4}[.,]\d{2})\s+(?:N\s+)?([\d.]+,\d{2})\s+(\d{1,3}(?:[.,]\d{1,4})?)\s+([\d.]+,\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+(\d{2})\b/g;
       let m;
 
       while((m = rowRe.exec(compact))){
